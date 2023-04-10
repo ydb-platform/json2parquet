@@ -59,6 +59,12 @@ int main() {
     arrow::Status st;
     auto read_options = arrow::json::ReadOptions::Defaults();
     auto parse_options = arrow::json::ParseOptions::Defaults();
+
+    arrow::FieldVector fields;
+    fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("r_regionkey", std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
+
+    parse_options.explicit_schema.reset(new arrow::Schema(fields));
+
     arrow::MemoryPool* pool = arrow::default_memory_pool();
     auto input = std::shared_ptr<arrow::io::InputStream>(new StdinStream());
     auto output = std::shared_ptr<arrow::io::OutputStream>(new arrow::io::StdoutStream());
