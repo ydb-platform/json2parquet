@@ -61,9 +61,14 @@ int main() {
     auto parse_options = arrow::json::ParseOptions::Defaults();
 
     arrow::FieldVector fields;
-    fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("r_regionkey", std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
+    for (auto& field : {"l_commitdate", "l_shipdate", "l_receiptdate", "o_orderdate"}) {
+        fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
+    }
 
     parse_options.explicit_schema.reset(new arrow::Schema(fields));
+
+    //read_options.use_threads = false;
+    //read_options.block_size *= 10;
 
     arrow::MemoryPool* pool = arrow::default_memory_pool();
     auto input = std::shared_ptr<arrow::io::InputStream>(new StdinStream());
@@ -85,22 +90,30 @@ int main() {
 
     // Choose compression
     std::shared_ptr<WriterProperties> props =
-        WriterProperties::Builder().compression(arrow::Compression::ZSTD)->build();
+        WriterProperties::Builder()
+            .memory_pool(pool)
+            ->compression(arrow::Compression::ZSTD)
+            //->compression_level(9)
+            ->max_row_group_length(1000000)
+            ->build();
 
     // Opt to store Arrow schema for easier reads back into Arrow
     std::shared_ptr<ArrowWriterProperties> arrow_props =
-        ArrowWriterProperties::Builder().store_schema()->build();
+        ArrowWriterProperties::Builder()
+            .store_schema()
+            ->build();
 
     // Create a writer
     std::unique_ptr<parquet::arrow::FileWriter> writer = * parquet::arrow::FileWriter::Open(*reader->schema().get(),
-                                                 arrow::default_memory_pool(), output,
-                                                 props, arrow_props);
+        pool, output,
+        props, arrow_props);
 
     // Write each batch as a row_group
     for (arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch : *reader) {
         auto batch = *maybe_batch;
-        auto table = *arrow::Table::FromRecordBatches(batch->schema(), {batch});
-        if (!writer->WriteTable(*table.get(), batch->num_rows()).ok()) {
+//        auto table = *arrow::Table::FromRecordBatches(batch->schema(), {batch});
+//        if (!writer->WriteTable(*table.get(), batch->num_rows()).ok()) {
+        if (!writer->WriteRecordBatch(*batch.get()).ok()) {
             std::cerr << "Cannot write\n";
         }
     }
