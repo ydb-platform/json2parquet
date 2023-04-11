@@ -73,15 +73,16 @@ int main(int argc, char** argv) {
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--date-fields") && i < argc-1) {
-            const char* sep = ",";
-            for (char* tok = strtok(argv[i+1], sep); tok; tok = strtok(nullptr, sep)) {
+            const char* sep = ","; i++;
+            for (char* tok = strtok(argv[i], sep); tok; tok = strtok(nullptr, sep)) {
                 fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(tok, std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
             }
         } else if (!strcmp(argv[i], "--max-row-group-length") && i < argc-1) {
-            max_row_group_length = atoi(argv[i+1]);
+            max_row_group_length = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--compression") && i < argc-1) {
-            compression = * arrow::util::Codec::GetCompressionType(argv[i+1]);
+            compression = * arrow::util::Codec::GetCompressionType(argv[++i]);
         } else {
+            printf("Unknown arg: %s\n", argv[i]);
             usage(argv[0]); return -1;
         }
     }
@@ -111,7 +112,7 @@ int main(int argc, char** argv) {
     std::shared_ptr<WriterProperties> props =
         WriterProperties::Builder()
             .memory_pool(pool)
-            ->compression(arrow::Compression::ZSTD)
+            ->compression(compression)
             ->max_row_group_length(max_row_group_length)
             ->build();
 
