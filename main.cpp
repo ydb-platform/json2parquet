@@ -7,12 +7,13 @@
 #include <arrow/buffer.h>
 #include <arrow/result.h>
 #include <arrow/table.h>
-
-#include <parquet/stream_writer.h>
-#include <parquet/arrow/schema.h>
-
-#include <parquet/arrow/writer.h>
 #include <arrow/util/type_fwd.h>
+#include <arrow/util/compression.h>
+
+#include <parquet/arrow/schema.h>
+#include <parquet/arrow/writer.h>
+
+namespace {
 
 class StdinStream : public arrow::io::InputStream {
  public:
@@ -55,70 +56,81 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> StdinStream::Read(int64_t nbytes) 
   return std::move(buffer);
 }
 
-int main() {
+void usage(const char* name) {
+    printf("%s [--date-fields field1,field2,...] [--max-row-group-length 1000] [--compression snappy]\n", name);
+}
+
+} /* namespace { */
+
+int main(int argc, char** argv) {
     arrow::Status st;
     auto read_options = arrow::json::ReadOptions::Defaults();
     auto parse_options = arrow::json::ParseOptions::Defaults();
+    int max_row_group_length = 1000000;
+    auto compression = * arrow::util::Codec::GetCompressionType("zstd");
 
     arrow::FieldVector fields;
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--date-fields") && i < argc-1) {
+            const char* sep = ",";
+            for (char* tok = strtok(argv[i+1], sep); tok; tok = strtok(nullptr, sep)) {
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(tok, std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
+            }
+        } else if (!strcmp(argv[i], "--max-row-group-length") && i < argc-1) {
+            max_row_group_length = atoi(argv[i+1]);
+        } else if (!strcmp(argv[i], "--compression") && i < argc-1) {
+            compression = * arrow::util::Codec::GetCompressionType(argv[i+1]);
+        } else {
+            usage(argv[0]); return -1;
+        }
+    }
+
+    /*
     for (auto& field : {"l_commitdate", "l_shipdate", "l_receiptdate", "o_orderdate"}) {
         fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
     }
+    */
 
-    parse_options.explicit_schema.reset(new arrow::Schema(fields));
-
-    //read_options.use_threads = false;
-    //read_options.block_size *= 10;
+    if (!fields.empty()) {
+        parse_options.explicit_schema.reset(new arrow::Schema(fields));
+    }
 
     arrow::MemoryPool* pool = arrow::default_memory_pool();
     auto input = std::shared_ptr<arrow::io::InputStream>(new StdinStream());
     auto output = std::shared_ptr<arrow::io::OutputStream>(new arrow::io::StdoutStream());
 
-    auto result = arrow::json::StreamingReader::Make(
+    auto reader = * arrow::json::StreamingReader::Make(
         input,
         read_options,
         parse_options);
 
-    if (!result.ok()) {
-        std::cerr << "Cannot create streaming json reader\n";
-        return -1;
-    }
-    auto reader = *result;
-
     using parquet::ArrowWriterProperties;
     using parquet::WriterProperties;
 
-    // Choose compression
     std::shared_ptr<WriterProperties> props =
         WriterProperties::Builder()
             .memory_pool(pool)
             ->compression(arrow::Compression::ZSTD)
-            //->compression_level(9)
-            ->max_row_group_length(1000000)
+            ->max_row_group_length(max_row_group_length)
             ->build();
 
-    // Opt to store Arrow schema for easier reads back into Arrow
     std::shared_ptr<ArrowWriterProperties> arrow_props =
         ArrowWriterProperties::Builder()
             .store_schema()
             ->build();
 
-    // Create a writer
     std::unique_ptr<parquet::arrow::FileWriter> writer = * parquet::arrow::FileWriter::Open(*reader->schema().get(),
         pool, output,
         props, arrow_props);
 
-    // Write each batch as a row_group
     for (arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch : *reader) {
         auto batch = *maybe_batch;
-//        auto table = *arrow::Table::FromRecordBatches(batch->schema(), {batch});
-//        if (!writer->WriteTable(*table.get(), batch->num_rows()).ok()) {
         if (!writer->WriteRecordBatch(*batch.get()).ok()) {
             std::cerr << "Cannot write\n";
         }
     }
 
-    // Write file footer and close
     if (!writer->Close().ok()) {
         std::cerr << "Cannot close\n";
     }
