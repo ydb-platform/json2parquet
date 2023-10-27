@@ -70,21 +70,54 @@ int main(int argc, char** argv) {
     auto compression = * arrow::util::Codec::GetCompressionType("zstd");
 
     arrow::FieldVector fields;
+    //fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("l_discount", arrow::decimal128(12,2))));
+    //fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("l_extendedprice", arrow::decimal128(12,2))));
+    //fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("l_quantity", arrow::decimal128(12,2))));
+    //fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("l_tax", arrow::decimal128(12,2))));
 
+
+
+    std::string schema_file;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--date-fields") && i < argc-1) {
             const char* sep = ","; i++;
             for (char* tok = strtok(argv[i], sep); tok; tok = strtok(nullptr, sep)) {
-                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(tok, std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(tok, arrow::date32())));
             }
         } else if (!strcmp(argv[i], "--max-row-group-length") && i < argc-1) {
             max_row_group_length = atoi(argv[++i]);
         } else if (!strcmp(argv[i], "--compression") && i < argc-1) {
             compression = * arrow::util::Codec::GetCompressionType(argv[++i]);
+        } else if (!strcmp(argv[i], "--schema-file") && i < argc-1) {
+            schema_file = argv[++i];
         } else {
             printf("Unknown arg: %s\n", argv[i]);
             usage(argv[0]); return -1;
         }
+    }
+
+    if (!schema_file.empty()) {
+        fprintf(stderr, "Using schema_file: '%s'\n", schema_file.c_str()); 
+        char buf[1024];
+        FILE* f = fopen(schema_file.c_str(), "rb");
+        if (!f) {
+            fprintf(stderr, "Cannot open file: '%s'\n", schema_file.c_str()); exit(-1);
+        }
+        const char* sep = " \n";
+        while (fgets(buf, sizeof(buf), f)) {
+            const char* field = strtok(buf, sep);
+            if (!field) { continue; }
+            const char* type = strtok(nullptr, sep);
+            if (!type) { continue; }
+            if (!strcmp(type, "date")) {
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
+            } else if (!strcmp(type, "int32")) {
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Int32Type))));
+            } else if (!strcmp(type, "int64")) {
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Int64Type))));
+            }
+        }
+        fclose(f);
     }
 
     /*
