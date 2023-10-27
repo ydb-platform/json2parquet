@@ -110,11 +110,11 @@ int main(int argc, char** argv) {
             const char* type = strtok(nullptr, sep);
             if (!type) { continue; }
             if (!strcmp(type, "date")) {
-                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::date32())));
             } else if (!strcmp(type, "int32")) {
-                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Int32Type))));
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::int32())));
             } else if (!strcmp(type, "int64")) {
-                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Int64Type))));
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::int64())));
             }
         }
         fclose(f);
