@@ -70,12 +70,6 @@ int main(int argc, char** argv) {
     auto compression = * arrow::util::Codec::GetCompressionType("zstd");
 
     arrow::FieldVector fields;
-    //fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("l_discount", arrow::decimal128(12,2))));
-    //fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("l_extendedprice", arrow::decimal128(12,2))));
-    //fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("l_quantity", arrow::decimal128(12,2))));
-    //fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field("l_tax", arrow::decimal128(12,2))));
-
-
 
     std::string schema_file;
     for (int i = 1; i < argc; i++) {
@@ -103,7 +97,7 @@ int main(int argc, char** argv) {
         if (!f) {
             fprintf(stderr, "Cannot open file: '%s'\n", schema_file.c_str()); exit(-1);
         }
-        const char* sep = " \n";
+        const char* sep = ": \n";
         while (fgets(buf, sizeof(buf), f)) {
             const char* field = strtok(buf, sep);
             if (!field) { continue; }
@@ -115,16 +109,12 @@ int main(int argc, char** argv) {
                 fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::int32())));
             } else if (!strcmp(type, "int64")) {
                 fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::int64())));
+            } else if (!strcmp(type, "double")) {
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::float64())));
             }
         }
         fclose(f);
     }
-
-    /*
-    for (auto& field : {"l_commitdate", "l_shipdate", "l_receiptdate", "o_orderdate"}) {
-        fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, std::shared_ptr<arrow::DataType>(new arrow::Date32Type))));
-    }
-    */
 
     if (!fields.empty()) {
         parse_options.explicit_schema.reset(new arrow::Schema(fields));
