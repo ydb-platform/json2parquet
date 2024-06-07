@@ -111,6 +111,10 @@ int main(int argc, char** argv) {
                 fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::int64())));
             } else if (!strcmp(type, "double")) {
                 fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::float64())));
+            } else if (strstr(type, "decimal")) {
+                int a,b;
+                sscanf(type, "decimal(%d,%d)", &a, &b);
+                fields.push_back(std::shared_ptr<arrow::Field>(new arrow::Field(field, arrow::decimal128(a, b))));
             }
         }
         fclose(f);
